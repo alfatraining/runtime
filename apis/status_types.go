@@ -41,9 +41,29 @@ type Status struct {
 	// +patchMergeKey=type
 	// +patchStrategy=merge
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
+
+	conditionManagerWrapper `json:"-"` // for an explanation why this exists, see below
 }
 
+// conditionManagerWrapper exists so as to allow the Status struct to implement the ConditionManager interface.
+// The ConditionManager interface cannot be embedded directly because the `deepcopy-gen` generator then fails.
+// Embedding an unexported wrapper struct and marking the field as excluded via the `json:"-"` struct tag allows
+// the code generation to succeed.
+// This wouldn't be necessary if fields could be excluded from `deepcopy-gen`.
+// +k8s:deepcopy-gen=false
+type conditionManagerWrapper struct {
+	ConditionManager
+}
+
+// DeepCopyInto is defined as a no-op. It's necessary because `deepcopy-gen` isn't running for unexported structs
+// but will still generate a call to it in the parent struct.
+func (w *conditionManagerWrapper) DeepCopyInto(_ *conditionManagerWrapper) {}
+
 var _ ConditionsAccessor = (*Status)(nil)
+
+var _ ConditionManager = (*Status)(nil)
+
+var _ ConditionManagerSetter = (*Status)(nil)
 
 // GetConditions implements ConditionsAccessor
 func (s *Status) GetConditions() []metav1.Condition {
@@ -63,4 +83,9 @@ func (s *Status) GetCondition(t string) *metav1.Condition {
 		}
 	}
 	return nil
+}
+
+// SetConditionManager satisfies the ConditionManagerSetter interface.
+func (s *Status) SetConditionManager(cm ConditionManager) {
+	s.conditionManagerWrapper = conditionManagerWrapper{ConditionManager: cm}
 }
