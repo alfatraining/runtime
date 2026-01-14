@@ -87,6 +87,12 @@ type ConditionManager interface {
 	InitializeConditions()
 }
 
+// ConditionManagerSetter allows the condition manager to be accessed from a resource.
+// It is implemented by the default Status subresource implementation.
+type ConditionManagerSetter interface {
+	SetConditionManager(ConditionManager)
+}
+
 // NewLivingConditionSet returns a ConditionSet to hold the conditions for the
 // living resource. ConditionReady is used as the happy condition.
 // The set of condition types provided are those of the terminal subconditions.
@@ -164,11 +170,17 @@ func (r ConditionSet) Manage(status ConditionsAccessor) ConditionManager {
 // Manage creates a ConditionManager from an accessor object using the original
 // ConditionSet as a reference. Status must be a pointer to a struct.
 func (r ConditionSet) ManageWithContext(ctx context.Context, status ConditionsAccessor) ConditionManager {
-	return conditionsImpl{
+	cm := conditionsImpl{
 		accessor:     status,
 		ConditionSet: r,
 		now:          rtime.RetrieveNow(ctx),
 	}
+
+	if s, isConditionManagerSetter := status.(ConditionManagerSetter); isConditionManagerSetter {
+		s.SetConditionManager(cm)
+	}
+
+	return cm
 }
 
 // IsHappy looks at the happy condition and returns true if that condition is
